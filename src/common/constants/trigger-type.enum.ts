@@ -1,0 +1,5 @@
+export enum WatchTriggerType {
+  PRICE_BELOW = 'PRICE_BELOW',
+  PERCENT_DROP = 'PERCENT_DROP',
+  BACK_IN_STOCK = 'BACK_IN_STOCK',
+}

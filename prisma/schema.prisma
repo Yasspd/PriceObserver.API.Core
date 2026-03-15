@@ -1,0 +1,156 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum SubscriptionPlanCode {
+  FREE
+  BASIC
+  PRO
+}
+
+enum NotificationChannel {
+  EMAIL
+  TELEGRAM
+  WEBHOOK
+}
+
+enum WatchTriggerType {
+  PRICE_BELOW
+  PERCENT_DROP
+  BACK_IN_STOCK
+}
+
+enum WatchRuleStatus {
+  ACTIVE
+  PAUSED
+  EXPIRED
+  COMPLETED
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+model User {
+  id                           String               @id @default(uuid())
+  email                        String               @unique
+  passwordHash                 String
+  firstName                    String?
+  lastName                     String?
+  telegramChatId               String?
+  emailNotificationsEnabled    Boolean              @default(true)
+  telegramNotificationsEnabled Boolean              @default(false)
+  webhookNotificationsEnabled  Boolean              @default(false)
+  webhookUrl                   String?
+  timezone                     String?
+  role                         Role                 @default(USER)
+  subscriptionPlanId           String?
+  subscriptionPlan             SubscriptionPlan?    @relation(fields: [subscriptionPlanId], references: [id])
+  products                     Product[]
+  watchRules                   WatchRule[]
+  notificationEvents           NotificationEvent[]
+  createdAt                    DateTime             @default(now())
+  updatedAt                    DateTime             @updatedAt
+
+  @@index([subscriptionPlanId])
+}
+
+model Product {
+  id               String          @id @default(uuid())
+  userId           String
+  title            String
+  url              String
+  externalId       String?
+  provider         String          @default("mock")
+  currency         String          @default("USD")
+  lastKnownPrice   Decimal?        @db.Decimal(10, 2)
+  lastKnownInStock Boolean         @default(true)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  user             User            @relation(fields: [userId], references: [id])
+  watchRules       WatchRule[]
+  priceSnapshots   PriceSnapshot[]
+  notificationEvents NotificationEvent[]
+
+  @@index([userId])
+}
+
+model WatchRule {
+  id                String              @id @default(uuid())
+  userId            String
+  productId         String
+  channel           NotificationChannel @default(EMAIL)
+  triggerType       WatchTriggerType
+  thresholdPrice    Decimal?            @db.Decimal(10, 2)
+  percentDrop       Float?
+  onlyOnce          Boolean             @default(false)
+  cooldownHours     Int?
+  expiresAt         DateTime?
+  maxNotifications  Int?
+  sentNotifications Int                 @default(0)
+  lastNotifiedAt    DateTime?
+  status            WatchRuleStatus     @default(ACTIVE)
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  user              User                @relation(fields: [userId], references: [id])
+  product           Product             @relation(fields: [productId], references: [id])
+  notificationEvents NotificationEvent[]
+
+  @@index([userId, status])
+  @@index([productId])
+}
+
+model PriceSnapshot {
+  id        String    @id @default(uuid())
+  productId String
+  price     Decimal?  @db.Decimal(10, 2)
+  inStock   Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  product   Product   @relation(fields: [productId], references: [id])
+
+  @@index([productId, createdAt])
+}
+
+model NotificationEvent {
+  id               String              @id @default(uuid())
+  userId           String
+  watchRuleId      String?
+  productId        String?
+  channel          NotificationChannel
+  status           NotificationStatus  @default(PENDING)
+  deduplicationKey String?             @unique
+  payload          Json?
+  errorMessage     String?
+  createdAt        DateTime            @default(now())
+  sentAt           DateTime?
+  user             User                @relation(fields: [userId], references: [id])
+  watchRule        WatchRule?          @relation(fields: [watchRuleId], references: [id])
+  product          Product?            @relation(fields: [productId], references: [id])
+
+  @@index([watchRuleId, status])
+  @@index([productId, status])
+}
+
+model SubscriptionPlan {
+  id                    String               @id @default(uuid())
+  code                  SubscriptionPlanCode @unique
+  name                  String
+  watchRulesLimit       Int
+  maxNotificationsPerRule Int
+  priority              Int                  @default(0)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  users                 User[]
+}
